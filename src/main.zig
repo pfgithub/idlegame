@@ -10,7 +10,11 @@ const Counter = struct {
 const Counters = &[_]Counter{
     .{ .id = "ticks" },
     .{ .id = "dirt" },
+    .{ .id = "wet_mud" },
+    .{ .id = "wet_mud_brick" },
     .{ .id = "shovel", .initial = f4(1.0000) },
+    .{ .id = "bucket", .initial = f4(1.0000) },
+    .{ .id = "water_bucket" },
 };
 const CountersEnum = blk: {
     var struct_fields: [Counters.len]std.builtin.Type.EnumField = undefined;
@@ -40,6 +44,10 @@ const Recipe = struct {
 };
 const Recipes = [_]Recipe{
     .{ .cmd = "dig", .effect = &.{ .from(.shovel, f4(-0.0001)), .from(.dirt, f4(0.1)) } },
+    .{ .cmd = "fill bucket", .effect = &.{ .from(.bucket, f4(-1)), .from(.water_bucket, f4(1)) } },
+    .{ .cmd = "wet dirt", .effect = &.{ .from(.water_bucket, f4(-1)), .from(.bucket, f4(1)), .from(.dirt, f4(-1)), .from(.wet_mud, f4(1)) } }, // TODO should say any amount of dirt <= 1 -> any amount of mud <= 1. maybe impl as a custom fn?
+    .{ .cmd = "pack mud", .effect = &.{ .from(.wet_mud, f4(-1)), .from(.wet_mud_brick, f4(1)) } },
+    .{ .cmd = "dump water", .effect = &.{ .from(.water_bucket, f4(-1)), .from(.bucket, f4(1)) } },
 };
 
 const Game = struct {
@@ -141,8 +149,16 @@ pub fn main() !void {
         if (std.mem.eql(u8, command, "ls")) {
             try stdout.print("ticks: {d:.4}\n", .{game.state.ticks / 10000});
             try stdout.print("dirt: {d:.4}\n", .{game.state.dirt / 10000});
+            try stdout.print("- wet dirt : [1|dirt] -> [1|wet_mud]\n", .{});
+            try stdout.print("wet_mud: {d:.4}\n", .{game.state.wet_mud / 10000});
+            try stdout.print("- pack mud : [1|wet_mud] -> [1|wet_mud_brick]\n", .{});
+            try stdout.print("wet_mud_brick: {d:.4}\n", .{game.state.wet_mud_brick / 10000});
             try stdout.print("shovel: {d:.4}\n", .{game.state.shovel / 10000});
-            try stdout.print("- dig: [0.0001|shovel] shovel -> [0.1|dirt] dirt\n", .{});
+            try stdout.print("- dig : [0.0001|shovel] shovel -> [0.1|dirt] dirt\n", .{});
+            try stdout.print("bucket: {d:.4}\n", .{game.state.bucket / 10000});
+            try stdout.print("- fill bucket : [1|bucket] -> [1|water_bucket]\n", .{});
+            try stdout.print("water_bucket: {d:.4}\n", .{game.state.water_bucket / 10000});
+            try stdout.print("- dump water : [1|water_bucket] -> [1|bucket]\n", .{});
         } else if (std.mem.eql(u8, command, "save")) {
             const save_res = try game.save(gpa);
             defer gpa.free(save_res);
@@ -170,7 +186,7 @@ pub fn main() !void {
                     if (counterGet(&game.state, min.tag).* + min.value >= 0) {
                         // pass
                     } else {
-                        try stdout.print("not enough resource", .{});
+                        try stdout.print("not enough resource\n", .{});
                         continue :lpc;
                     }
                 }
