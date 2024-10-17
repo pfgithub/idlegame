@@ -146,6 +146,18 @@ pub fn main() !void {
                 try stdout.print("save file error: {s}\n", .{@errorName(e)});
                 try stdout.print("{s}\n", .{save_res});
             }
+        } else if (std.mem.eql(u8, command, "exit")) {
+            break;
+        } else if (std.mem.eql(u8, command, "help")) {
+            try stdout.writeAll(
+                \\Commands:
+                \\- ls : list counts
+                \\- save : save game
+                \\- exit : exit game
+                \\- help : this menu
+                \\Input the name of a recipe to execute it.
+                \\
+            );
         } else for (Recipes) |recipe| {
             if (std.mem.eql(u8, command, recipe.cmd)) {
                 for (recipe.minimum) |min| {
@@ -164,6 +176,7 @@ pub fn main() !void {
             }
         } else {
             try stdout.print("Bad command: \"{}\"\n", .{std.zig.fmtEscapes(command)});
+            try stdout.print("Use 'help' for list of commands.\n", .{});
         }
     }
 }
