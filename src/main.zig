@@ -69,6 +69,15 @@ const Game = struct {
     pub fn deinit(self: *Game) void {
         self.last_save_value.deinit();
     }
+    pub fn save(self: *Game, gpa: std.mem.Allocator) ![]const u8 {
+        const res = &self.last_save_value.value.object;
+        for (Counters, 0..) |counter, i| {
+            const val = counterGet(&self.state, @enumFromInt(i));
+            const gpres = try res.getOrPut(counter.id);
+            gpres.value_ptr.* = .{ .float = val.* }; // this makes 9996 format as 9.996e3 for some reason
+        }
+        return std.json.stringifyAlloc(gpa, &self.last_save_value.value, .{});
+    }
 
     pub fn tick(self: *Game, time_ms: i64) void {
         if (time_ms < self.last_tick_time_ms) return;
@@ -95,7 +104,17 @@ pub fn main() !void {
     defer std.debug.assert(gpa_backing.deinit() == .ok);
     const gpa = gpa_backing.allocator();
 
-    var game: Game = try .init(gpa, "{}");
+    const savetxt = if (std.fs.cwd().readFileAlloc(gpa, "idlegamesave.json", std.math.maxInt(usize))) |v| blk: {
+        break :blk v;
+    } else |e| blk: {
+        break :blk switch (e) {
+            error.OutOfMemory => return e,
+            else => try gpa.dupe(u8, "{}"),
+        };
+    };
+    defer gpa.free(savetxt);
+
+    var game: Game = try .init(gpa, savetxt);
     defer game.deinit();
 
     const stdin = std.io.getStdIn().reader();
@@ -114,10 +133,19 @@ pub fn main() !void {
         game.tick(std.time.milliTimestamp());
 
         if (std.mem.eql(u8, command, "ls")) {
-            try stdout.print("ticks: {d}\n", .{game.state.ticks});
-            try stdout.print("dirt: {d}\n", .{game.state.dirt});
-            try stdout.print("shovel: {d}\n", .{game.state.shovel});
+            try stdout.print("ticks: {d:.4}\n", .{game.state.ticks / 10000});
+            try stdout.print("dirt: {d:.4}\n", .{game.state.dirt / 10000});
+            try stdout.print("shovel: {d:.4}\n", .{game.state.shovel / 10000});
             try stdout.print("- dig: [0.0001|shovel] shovel -> [0.1|dirt] dirt\n", .{});
+        } else if (std.mem.eql(u8, command, "save")) {
+            const save_res = try game.save(gpa);
+            defer gpa.free(save_res);
+            if (std.fs.cwd().writeFile(.{ .sub_path = "idlegamesave.json", .data = save_res })) |_| {
+                try stdout.print("saved\n", .{});
+            } else |e| {
+                try stdout.print("save file error: {s}\n", .{@errorName(e)});
+                try stdout.print("{s}\n", .{save_res});
+            }
         } else for (Recipes) |recipe| {
             if (std.mem.eql(u8, command, recipe.cmd)) {
                 for (recipe.minimum) |min| {
@@ -131,7 +159,7 @@ pub fn main() !void {
                 for (recipe.effect) |fx| {
                     counterGet(&game.state, fx.tag).* += fx.value;
                 }
-                try stdout.print("xc\n", .{});
+                try stdout.print("executed\n", .{});
                 continue :lpc;
             }
         } else {
