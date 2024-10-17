@@ -36,11 +36,10 @@ const Amount = struct {
 };
 const Recipe = struct {
     cmd: []const u8,
-    minimum: []const Amount,
     effect: []const Amount,
 };
 const Recipes = [_]Recipe{
-    .{ .cmd = "dig", .minimum = &.{.from(.shovel, f4(0.0001))}, .effect = &.{ .from(.shovel, f4(-0.0001)), .from(.dirt, f4(0.1)) } },
+    .{ .cmd = "dig", .effect = &.{ .from(.shovel, f4(-0.0001)), .from(.dirt, f4(0.1)) } },
 };
 
 const Game = struct {
@@ -160,8 +159,8 @@ pub fn main() !void {
             );
         } else for (Recipes) |recipe| {
             if (std.mem.eql(u8, command, recipe.cmd)) {
-                for (recipe.minimum) |min| {
-                    if (counterGet(&game.state, min.tag).* >= min.value) {
+                for (recipe.effect) |min| {
+                    if (counterGet(&game.state, min.tag).* + min.value >= 0) {
                         // pass
                     } else {
                         try stdout.print("not enough resource", .{});
