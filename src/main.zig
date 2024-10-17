@@ -96,6 +96,13 @@ const Game = struct {
     pub fn tickOne(self: *Game) void {
         self.state.ticks += f4(1);
     }
+
+    pub fn displayRecipe(recipe: Recipe) void {
+        // any negative effects are inverted and become costs
+        // any positive effects are effects
+        // output as `- name : cost1, cost2 -> effect1, effect2`
+        _ = recipe;
+    }
 };
 
 pub fn main() !void {
